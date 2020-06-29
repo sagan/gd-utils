@@ -414,7 +414,7 @@ async function create_folder(name, parent, use_sa, note) {
       while (retry++ < 3) {
         try {
           await axins.patch(
-            `https://www.googleapis.com/upload/drive/v3/files/${noteFile.id}`,
+            `https://www.googleapis.com/upload/drive/v3/files/${noteFile.id}?uploadType=media`,
             data,
             {
               headers: Object.assign({}, headers, {
