@@ -67,10 +67,12 @@ async function send_all_tasks(chat_id) {
     .all()
     .sort((a, b) => a.id - b.id);
   if (!records.length) return sm({ chat_id, text: "数据库中没有任务记录" });
-  const inline_keyboard = records
-    .filter((a) => a.status == "copying")
-    .slice(-5)
-    .map(({ id }) => ({ text: `任务${id}进度`, callback_data: `task ${id}` }));
+  const inline_keyboard = [
+    records
+      .filter((a) => a.status == "copying")
+      .slice(-5)
+      .map(({ id }) => ({ text: `任务${id}进度`, callback_data: `task ${id}` }))
+  ];
   const tb = new Table({ style: { head: [], border: [] } });
   const headers = ["ID", "status", "name", "ctime"];
   records = records.map((v) => {
@@ -153,18 +155,18 @@ async function send_task_info({ task_id, chat_id }) {
 ${note}
 `;
 
-  let inline_keyboard = [];
-  inline_keyboard.push({
+  let inline_keyboard = [[]];
+  inline_keyboard[0].push({
     text: "统计源",
     callback_data: `count ${source}`
   });
   if (status == "finished") {
-    inline_keyboard.push({
+    inline_keyboard[0].push({
       text: "统计已复制",
       callback_data: `count ${target}`
     });
   } else {
-    inline_keyboard.push({
+    inline_keyboard[0].push({
       text: "重新查询进度",
       callback_data: `task ${task_id}`
     });

@@ -74,7 +74,12 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
         task_id &&
           sm({
             chat_id,
-            text: `开始复制，任务ID: ${task_id} 可输入 /task ${task_id} 查询进度`
+            text: `开始复制，任务ID: ${task_id} 可输入 /task ${task_id} 查询进度`,
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "查询进度", callback_data: `task ${task_id}` }]
+              ]
+            }
           });
       });
     } else if (action === "task") {
