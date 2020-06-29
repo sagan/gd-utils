@@ -372,7 +372,7 @@ function validate_fid(fid) {
   return fid.match(reg);
 }
 
-async function create_folder(name, parent, use_sa) {
+async function create_folder(name, parent, use_sa, note) {
   let url = `https://www.googleapis.com/drive/v3/files`;
   const params = { supportsAllDrives: true };
   url += "?" + params_to_query(params);
@@ -391,6 +391,25 @@ async function create_folder(name, parent, use_sa) {
       retry++;
       handle_error(err);
       console.log("创建目录重试中：", name, "重试次数：", retry);
+    }
+  }
+  if (data && note) {
+    retry = 0;
+    while (retry++ < 3) {
+      try {
+        await axins.post(
+          `https://www.googleapis.com/drive/v3/files/${data.id}/comments?fields=id`,
+          { content: note },
+          { headers }
+        );
+        break;
+      } catch (e) {
+        console.log(
+          `Warning: add comment to folder ${data.id} (${
+            data.name
+          }) failed with error ${e.toString()}`
+        );
+      }
     }
   }
   return data;
@@ -487,10 +506,10 @@ async function real_copy({
 }) {
   async function get_new_root() {
     if (name) {
-      return create_folder(name, target, service_account);
+      return create_folder(name, target, service_account, note);
     } else {
       const source_info = await get_info_by_id(source, service_account);
-      return create_folder(source_info.name, target, service_account);
+      return create_folder(source_info.name, target, service_account, note);
     }
   }
 
