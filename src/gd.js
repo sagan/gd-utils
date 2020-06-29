@@ -112,10 +112,7 @@ async function count({
   if (!update) {
     const info = get_all_by_fid(fid);
     if (info) {
-      console.log(
-        "找到本地缓存数据，缓存时间：",
-        dayjs(info.mtime).format("YYYY-MM-DD HH:mm:ss")
-      );
+      console.log("找到本地缓存数据，缓存时间：", dayjs(info.mtime).format());
       const out_str = get_out_str({ info, type, sort });
       if (output) return fs.writeFileSync(output, out_str);
       return console.log(out_str);
@@ -394,22 +391,41 @@ async function create_folder(name, parent, use_sa, note) {
     }
   }
   if (data && note) {
+    let noteFile;
     retry = 0;
     while (retry++ < 3) {
       try {
-        await axins.post(
-          `https://www.googleapis.com/drive/v3/files/${data.id}/comments?fields=id`,
-          { content: note },
+        noteFile = await axins.post(
+          url,
+          { name: `${name}.txt`, parents: [parent] },
           { headers }
         );
         break;
       } catch (e) {
-        console.log(
-          `Warning: add comment to folder ${data.id} (${
-            data.name
-          }) failed with error ${e.toString()}`
-        );
+        console.log(`Error: add ${name}.txt note`);
         axiosErrorLogger(e);
+      }
+    }
+    if (noteFile) {
+      let data = Buffer.from(note);
+      retry = 0;
+      while (retry++ < 3) {
+        try {
+          await axins.patch(
+            `https://www.googleapis.com/upload/drive/v3/files/${noteFile.id}`,
+            data,
+            {
+              headers: Object.assign({}, headers, {
+                ["Content-Type"]: "text/plain",
+                ["Content-Length"]: data.byteLength
+              })
+            }
+          );
+          break;
+        } catch (e) {
+          console.log(`Error: put ${name}.txt note`);
+          axiosErrorLogger(e);
+        }
       }
     }
   }
@@ -861,10 +877,7 @@ async function dedupe({ fid, update, service_account }) {
   if (!update) {
     const info = get_all_by_fid(fid);
     if (info) {
-      console.log(
-        "找到本地缓存数据，缓存时间：",
-        dayjs(info.mtime).format("YYYY-MM-DD HH:mm:ss")
-      );
+      console.log("找到本地缓存数据，缓存时间：", dayjs(info.mtime).format());
       arr = info;
     }
   }

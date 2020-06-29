@@ -45,6 +45,7 @@ function send_choice({ fid, chat_id, note }) {
   return sm({
     chat_id,
     text: `分享ID: ${fid}
+日期: ${dayjs().format()}
 链接: https://drive.google.com/drive/folders/${fid}
 说明:\n\n${(note || "").trim().slice(0, 2000)}`,
     reply_markup: {
@@ -77,7 +78,7 @@ async function send_all_tasks(chat_id) {
   const headers = ["ID", "status", "name", "ctime"];
   records = records.map((v) => {
     const { id, status, name, ctime } = v;
-    return [id, status, name, dayjs(ctime).format("YYYY-MM-DD HH:mm:ss")];
+    return [id, status, name, dayjs(ctime).format()];
   });
   tb.push(headers, ...records);
   const text = tb.toString().replace(/─/g, "—");
@@ -141,8 +142,8 @@ async function send_task_info({ task_id, chat_id }) {
 目的ID: ${gen_link(target)}
 文件夹名称: ${name}
 任务状态: ${status}
-创建时间: ${dayjs(ctime).format("YYYY-MM-DD HH:mm:ss")}
-完成时间: ${ftime ? dayjs(ftime).format("YYYY-MM-DD HH:mm:ss") : "未完成"}
+创建时间: ${dayjs(ctime).format()}
+完成时间: ${ftime ? dayjs(ftime).format() : "未完成"}
 目录进度: ${copied_folders} / ${
     folder_count === undefined ? "未知数量" : folder_count
   }
