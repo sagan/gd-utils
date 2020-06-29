@@ -395,11 +395,13 @@ async function create_folder(name, parent, use_sa, note) {
     retry = 0;
     while (retry++ < 3) {
       try {
-        noteFile = await axins.post(
-          url,
-          { name: `${name}.txt`, parents: [parent] },
-          { headers }
-        );
+        noteFile = (
+          await axins.post(
+            url,
+            { name: `${name}.txt`, parents: [parent] },
+            { headers }
+          )
+        ).data;
         break;
       } catch (e) {
         console.log(`Error: add ${name}.txt note`);
