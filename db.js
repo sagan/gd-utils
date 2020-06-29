@@ -1,5 +1,20 @@
-const path = require('path')
-const db_location = path.join(__dirname, 'gdurl.sqlite')
-const db = require('better-sqlite3')(db_location)
+const path = require("path");
+const fs = require("fs");
+const db_location = path.join(__dirname, "gdurl.sqlite");
+const db = require("better-sqlite3")(db_location);
 
-module.exports = { db }
+module.exports = { db };
+
+if (require.main === module) {
+  main(process.argv.slice(2));
+}
+
+async function main(args) {
+  if (args[0] === "rebuild") {
+    console.log("rebuild sqlite");
+    await db.exec(
+      fs.readFileSync(path.join(__dirname, "create-table.sql"), "utf8")
+    );
+    await db.close();
+  }
+}

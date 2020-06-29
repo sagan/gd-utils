@@ -1,3 +1,8 @@
+drop index IF EXISTS "gd_fid";
+drop index IF EXISTS "task_source_target";
+drop table IF EXISTS "gd";
+drop table IF EXISTS "task";
+
 CREATE TABLE "gd" (
   "id"  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
   "fid" TEXT NOT NULL UNIQUE,
@@ -19,6 +24,8 @@ CREATE TABLE "task" (
   "status" TEXT,
   "copied"  TEXT DEFAULT '',
   "mapping" TEXT DEFAULT '',
+  "name" TEXT DEFAULT '',
+  "note" TEXT DEFAULT '',
   "ctime" INTEGER,
   "ftime" INTEGER
 );
