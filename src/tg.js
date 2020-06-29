@@ -214,7 +214,18 @@ async function tg_copy({ fid, target, chat_id, note }) {
       if (!record) record = {}; // 防止无限循环
       if (!folder) return;
       const link = "https://drive.google.com/drive/folders/" + folder.id;
-      sm({ chat_id, text: `${fid} 复制完成，新文件夹链接：${link}` });
+      sm({
+        chat_id,
+        text: `${fid} 复制完成，新文件夹链接：${link}`,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "统计源", callback_data: `count ${fid}` },
+              { text: "统计复制", callback_data: `count ${target}` }
+            ]
+          ]
+        }
+      });
     })
     .catch((err) => {
       if (!record) record = {};
@@ -279,6 +290,7 @@ ${table}</pre>`
 表格太长超出telegram消息限制，只显示概要：
 文件总数：${file_count}
 目录总数：${folder_count}
+文件+目录总数：${file_count + folder_count}
 合计大小：${total_size}
 </pre>`
         });
