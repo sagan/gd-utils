@@ -67,6 +67,10 @@ async function send_all_tasks(chat_id) {
     .all()
     .sort((a, b) => a.id - b.id);
   if (!records.length) return sm({ chat_id, text: "数据库中没有任务记录" });
+  const inline_keyboard = records
+    .filter((a) => a.status == "copying")
+    .slice(-5)
+    .map(({ id }) => ({ text: `任务${id}进度`, callback_data: `task ${id}` }));
   const tb = new Table({ style: { head: [], border: [] } });
   const headers = ["ID", "status", "name", "ctime"];
   records = records.map((v) => {
@@ -80,7 +84,10 @@ async function send_all_tasks(chat_id) {
     .post(url, {
       chat_id,
       parse_mode: "HTML",
-      text: `最近${limit}条拷贝任务：\n<pre>${text}</pre>`
+      text: `最近${limit}条拷贝任务：\n<pre>${text}</pre>`,
+      reply_markup: {
+        inline_keyboard
+      }
     })
     .catch(async (err) => {
       const description =
@@ -93,7 +100,10 @@ async function send_all_tasks(chat_id) {
         return sm({
           chat_id,
           parse_mode: "HTML",
-          text: `所有拷贝任务：\n<pre>${text}</pre>`
+          text: `最近${limit}条拷贝任务：\n<pre>${text}</pre>`,
+          reply_markup: {
+            inline_keyboard
+          }
         });
       }
       console.error(err);
