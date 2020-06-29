@@ -383,9 +383,9 @@ async function create_folder(name, parent, use_sa, note) {
   };
   let retry = 0;
   let data;
+  const headers = await gen_headers(use_sa);
   while (!data && retry < RETRY_LIMIT) {
     try {
-      const headers = await gen_headers(use_sa);
       data = (await axins.post(url, post_data, { headers })).data;
     } catch (err) {
       retry++;
