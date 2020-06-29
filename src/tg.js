@@ -171,6 +171,7 @@ ${note}
       callback_data: `task ${task_id}`
     });
   }
+  inline_keyboard[0].push({ text: "所有任务", callback_data: `task` });
   return sm({
     chat_id,
     text,
@@ -233,7 +234,8 @@ async function tg_copy({ fid, target, chat_id, note }) {
           inline_keyboard: [
             [
               { text: "统计源", callback_data: `count ${fid}` },
-              { text: "统计复制", callback_data: `count ${target}` }
+              { text: "统计复制", callback_data: `count ${target}` },
+              { text: "所有任务", callback_data: `task` }
             ]
           ]
         }

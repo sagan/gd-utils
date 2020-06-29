@@ -56,7 +56,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
     const { id, data } = callback_query;
     const chat_id = callback_query.from.id;
     const note = callback_query.message ? callback_query.message.text : "";
-    const [action, fid] = data.split(" ");
+    const [action, fid] = data.split(/\s+/);
     if (action === "count") {
       if (counting[fid])
         return sm({ chat_id, text: fid + " 正在统计，请稍等片刻" });
@@ -77,13 +77,18 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
             text: `开始复制，任务ID: ${task_id} 可输入 /task ${task_id} 查询进度`,
             reply_markup: {
               inline_keyboard: [
-                [{ text: "查询进度", callback_data: `task ${task_id}` }]
+                [{ text: "查询进度", callback_data: `task ${task_id}` }],
+                [{ text: "所有任务", callback_data: `task` }]
               ]
             }
           });
       });
     } else if (action === "task") {
-      send_task_info({ task_id: fid, chat_id }).catch(console.error);
+      if (!fid) {
+        send_all_tasks(chat_id);
+      } else {
+        send_task_info({ task_id: fid, chat_id }).catch(console.error);
+      }
     }
     return reply_cb_query({ id, data }).catch(console.error);
   }
@@ -140,7 +145,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
       });
     } else if (text.startsWith("/task")) {
       let task_id = text.replace("/task", "").trim();
-      if (task_id === "all") {
+      if (!task_id || task_id === "all") {
         return send_all_tasks(chat_id);
       }
       task_id = parseInt(task_id);
