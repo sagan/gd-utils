@@ -4,7 +4,7 @@
   "description": "google drive utils",
   "main": "src/gd.js",
   "scripts": {
-    "start": "https_proxy='http://127.0.0.1:1086' nodemon server.js",
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
