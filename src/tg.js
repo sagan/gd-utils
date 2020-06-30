@@ -5,7 +5,7 @@ const HttpsProxyAgent = require("https-proxy-agent");
 
 const { db } = require("../db");
 const { gen_count_body, validate_fid, real_copy } = require("./gd");
-const { AUTH, DEFAULT_TARGET } = require("../config");
+const { AUTH, DEFAULT_TARGET } = require("../config.loader");
 const { tg_token } = AUTH;
 
 if (!tg_token) throw new Error("请先在auth.js里设置tg_token");
@@ -23,6 +23,8 @@ module.exports = {
   send_choice,
   send_task_info,
   send_all_tasks,
+  tg_run,
+  tg_clear,
   tg_copy
 };
 
@@ -32,11 +34,18 @@ function send_help(chat_id) {
 
 /help | 返回本条使用说明
 
-/count shareID | 返回sourceID的文件统计信息, sourceID可以是google drive分享网址本身，也可以是分享ID
+/run taskID | 重新开始运行(已中断的)任务
 
-/copy sourceID targetID | 将sourceID的文件复制到targetID里（会新建一个文件夹），若不填targetID，则会复制到默认位置（在config.js里设置）。返回拷贝任务的taskID
+/clear | 清除已完成任务信息
 
-/task taskID | 返回对应任务的进度信息，若不填则返回所有正在运行的任务进度，若填 all 则返回所有任务列表
+/count shareID | 返回sourceID的文件统计信息, sourceID可以是 google drive分享网址本身，也可以是分享ID
+
+/copy sourceID [targetID] | 将sourceID的文件复制到targetID里（会新建一个文件夹），若不提供 targetID，则会复制到默认位置（在config.js里设置）。返回拷贝任务的taskID
+
+/task [taskID] | 返回对应任务的进度信息。不提供 taskID 或 taskID 为 all 则返回所有任务列表；taskID 为 0 则返回所有正在运行的任务进度
+
+{其它任意文本} | 识别文本里出现的(第1个) Google Drive 分享链接或 ID 并提供选项以转存
+
 </pre>`;
   return sm({ chat_id, text, parse_mode: "HTML" });
 }
@@ -70,9 +79,14 @@ async function send_all_tasks(chat_id) {
   if (!records.length) return sm({ chat_id, text: "数据库中没有任务记录" });
   const inline_keyboard = [
     records
-      .filter((a) => a.status == "copying")
+      .filter((a) => a.status == "copying" || a.status == "interrupt")
       .slice(-5)
-      .map(({ id }) => ({ text: `任务${id}进度`, callback_data: `task ${id}` }))
+      .map(({ id }) =>
+        a.status == "copying"
+          ? { text: `任务${id}进度`, callback_data: `task ${id}` }
+          : { text: `恢复${id}任务`, callback_data: `run ${id}` }
+      )
+      .concat({ text: "刷新", callback_data: `task` })
   ];
   const tb = new Table({ style: { head: [], border: [] } });
   const headers = ["ID", "status", "name", "ctime"];
@@ -180,6 +194,55 @@ ${note}
     reply_markup: {
       inline_keyboard
     }
+  });
+}
+
+async function tg_clear({ chat_id, type }) {
+  if (!type) {
+    db.prepare("delete from task where status = ?").run("finished");
+    sm({
+      chat_id,
+      text: `已清空所有已完成任务`,
+      reply_markup: {
+        inline_keyboard: [[{ text: "所有任务", callback_data: `task` }]]
+      }
+    });
+  } else if (type == "destroy") {
+    db.prepare("delete from task").run();
+    db.prepare("delete from gd").run();
+    sm({
+      chat_id,
+      text: `已清空所有数据`
+    });
+  } else {
+    sm({
+      chat_id,
+      text: `未识别的清空命令类型 ${type}`
+    });
+  }
+}
+
+async function tg_run({ task_id, chat_id }) {
+  let record = db
+    .prepare("select id, status, source, target, note from task where id = ?")
+    .get(task_id);
+  if (!record) {
+    return sm({
+      chat_id,
+      text: `未找到任务 ${task_id}`
+    });
+  }
+  if (record.status != "interrupt") {
+    return sm({
+      chat_id,
+      text: `任务 ${task_id} 当前状态 ${record.status} 不支持此(run)操作`
+    });
+  }
+  return tg_copy({
+    fid: record.source,
+    target: record.target,
+    chat_id,
+    note: record.note
   });
 }
 

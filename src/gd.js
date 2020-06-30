@@ -17,7 +17,7 @@ const {
   LOG_DELAY,
   PAGE_SIZE,
   DEFAULT_TARGET
-} = require("../config");
+} = require("../config.loader");
 const { db } = require("../db");
 const { make_table, make_tg_table, make_html, summary } = require("./summary");
 
@@ -395,13 +395,11 @@ async function create_folder(name, parent, use_sa, note) {
     retry = 0;
     while (retry++ < 3) {
       try {
-        noteFile = (
-          await axins.post(
-            url,
-            { name: `${name}.txt`, parents: [parent] },
-            { headers }
-          )
-        ).data;
+        noteFile = (await axins.post(
+          url,
+          { name: `${name}.txt`, parents: [parent] },
+          { headers }
+        )).data;
         break;
       } catch (e) {
         console.log(`Error: add ${name}.txt note`);
@@ -414,7 +412,9 @@ async function create_folder(name, parent, use_sa, note) {
       while (retry++ < 3) {
         try {
           await axins.patch(
-            `https://www.googleapis.com/upload/drive/v3/files/${noteFile.id}?uploadType=media`,
+            `https://www.googleapis.com/upload/drive/v3/files/${
+              noteFile.id
+            }?uploadType=media`,
             data,
             {
               headers: Object.assign({}, headers, {

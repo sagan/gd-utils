@@ -2,30 +2,23 @@ const dayjs = require("dayjs");
 const Koa = require("koa");
 const bodyParser = require("koa-bodyparser");
 
+const { IP, PORT, SECRET } = require("./config.loader");
 const router = require("./src/router");
-
 const app = new Koa();
 app.proxy = true;
 
-app.use(catcher);
+app.use(async (ctx, next) => {
+  if (SECRET && ctx.query.secret !== SECRET) {
+    ctx.throw(403);
+  }
+  try {
+    await next();
+  } catch (e) {
+    console.log(e.message);
+    ctx.throw(500);
+  }
+});
 app.use(bodyParser());
 app.use(router.routes());
 app.use(router.allowedMethods());
-
-app.use((ctx) => {
-  ctx.status = 404;
-  ctx.body = "not found";
-});
-
-const PORT = 23333;
-app.listen(PORT, "0.0.0.0", console.log("http://127.0.0.1:" + PORT));
-
-async function catcher(ctx, next) {
-  try {
-    return await next();
-  } catch (e) {
-    console.error(e);
-    ctx.status = 500;
-    ctx.body = e.message;
-  }
-}
+app.listen(PORT, IP, console.log(`Listening on ${IP}:${PORT}`));
