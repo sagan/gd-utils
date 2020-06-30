@@ -8,7 +8,7 @@ const { gen_count_body, validate_fid, real_copy } = require("./gd");
 const { AUTH, DEFAULT_TARGET, HTTPS_PROXY } = require("../config.loader");
 const { tg_token } = AUTH;
 
-if (!tg_token) throw new Error("请先在auth.js里设置tg_token");
+if (!tg_token) throw new Error("未配置tg_token");
 const axins = axios.create(
   HTTPS_PROXY ? { httpsAgent: new HttpsProxyAgent(HTTPS_PROXY) } : {}
 );
@@ -199,7 +199,7 @@ ${note}
 async function tg_clear({ chat_id, type }) {
   if (!type) {
     db.prepare("delete from task where status = ?").run("finished");
-    sm({
+    return sm({
       chat_id,
       text: `已清空所有已完成任务`,
       reply_markup: {
@@ -209,12 +209,12 @@ async function tg_clear({ chat_id, type }) {
   } else if (type == "destroy") {
     db.prepare("delete from task").run();
     db.prepare("delete from gd").run();
-    sm({
+    return sm({
       chat_id,
       text: `已清空所有数据`
     });
   } else {
-    sm({
+    return sm({
       chat_id,
       text: `未识别的清空命令类型 ${type}`
     });
