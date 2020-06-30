@@ -12,9 +12,7 @@ if (require.main === module) {
 async function main(args) {
   if (args[0] === "rebuild") {
     console.log("rebuild sqlite");
-    await db.exec(
-      fs.readFileSync(path.join(__dirname, "create-table.sql"), "utf8")
-    );
-    await db.close();
+    db.exec(fs.readFileSync(path.join(__dirname, "create-table.sql"), "utf8"));
+    db.close();
   }
 }
