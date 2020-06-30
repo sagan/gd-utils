@@ -3,6 +3,7 @@ const INTETER_CONFIG_KEYS = ["PORT"];
 const config = {
   IP: "0.0.0.0",
   PORT: 23333,
+  HTTPS_PROXY: "",
   SECRET: "",
   TIMEOUT_BASE: 7000,
   // 最大超时设置，比如某次请求，第一次7s超时，第二次14s，第三次28s，第四次56s，第五次不是112s而是60s，后续同理

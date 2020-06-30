@@ -5,13 +5,12 @@ const HttpsProxyAgent = require("https-proxy-agent");
 
 const { db } = require("../db");
 const { gen_count_body, validate_fid, real_copy } = require("./gd");
-const { AUTH, DEFAULT_TARGET } = require("../config.loader");
+const { AUTH, DEFAULT_TARGET, HTTPS_PROXY } = require("../config.loader");
 const { tg_token } = AUTH;
 
 if (!tg_token) throw new Error("请先在auth.js里设置tg_token");
-const { https_proxy } = process.env;
 const axins = axios.create(
-  https_proxy ? { httpsAgent: new HttpsProxyAgent(https_proxy) } : {}
+  HTTPS_PROXY ? { httpsAgent: new HttpsProxyAgent(HTTPS_PROXY) } : {}
 );
 
 module.exports = {
