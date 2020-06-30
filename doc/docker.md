@@ -25,5 +25,5 @@ curl 'https://gdutils.example.com/api/gdurl/count?fid=124pjM5LggSuwI1n40bcD5tQ13
 Register telegram webhook
 
 ```
-curl -F "url=https://gdutils.example.com/api/gdurl/tgbot" 'https://api.telegram.org/bot[YOUR_BOT_TOKEN]/setWebhook'
+curl -F "url=https://gdutils.example.com/api/gdurl/tgbot?secret=[SECRET]" 'https://api.telegram.org/bot[YOUR_BOT_TOKEN]/setWebhook'
 ```
