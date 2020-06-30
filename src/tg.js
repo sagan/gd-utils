@@ -36,7 +36,7 @@ function send_help(chat_id) {
 
 /run taskID | 重新开始运行(已中断的)任务
 
-/clear | 清除已完成任务信息
+/clear [type] | 清除已完成任务信息；如果 type 为 destroy, 会清空所有数据
 
 /count shareID | 返回sourceID的文件统计信息, sourceID可以是 google drive分享网址本身，也可以是分享ID
 
