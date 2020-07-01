@@ -35,7 +35,7 @@ function send_help(chat_id) {
 
 /run taskID | 重新开始运行(已中断的)任务
 
-/clear [type] | 清除已完成任务信息；如果 type 为 destroy, 会清空所有数据。如果 type 为 cache，会清空本地缓存的(之前复制任务的)Google Drive 文件信息。
+/clear [type] | 清除已完成任务信息；如果 type 为 destroy, 会清空所有数据。
 
 /count shareID [type] | 返回sourceID的文件统计信息, sourceID 是 google drive 分享网址或分享ID。type 为 update 则(忽略本地缓存)重新进行统计
 
@@ -53,7 +53,7 @@ function send_help(chat_id) {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "清除缓存", callback_data: `clear cache` },
+          { text: "清除已完成任务", callback_data: `clear` },
           { text: "所有任务", callback_data: `task` }
         ]
       ]
@@ -226,12 +226,6 @@ async function tg_clear({ chat_id, type }) {
         inline_keyboard: [[{ text: "所有任务", callback_data: `task` }]]
       }
     });
-  } else if (type == "cache") {
-    db.prepare("delete from gd").run();
-    return sm({
-      chat_id,
-      text: `已清空所有文件缓存`
-    });
   } else if (type == "destroy") {
     db.prepare("delete from task").run();
     db.prepare("delete from gd").run();
@@ -247,7 +241,7 @@ async function tg_clear({ chat_id, type }) {
   }
 }
 
-async function tg_run({ task_id, chat_id }) {
+async function tg_run({ task_id, chat_id, type }) {
   let record = db
     .prepare("select id, status, source, target, note from task where id = ?")
     .get(task_id);
@@ -257,7 +251,10 @@ async function tg_run({ task_id, chat_id }) {
       text: `未找到任务 ${task_id}`
     });
   }
-  if (record.status != "interrupt") {
+  if (
+    record.status != "interrupt" &&
+    !(record.status == "finished" && type == "update")
+  ) {
     return sm({
       chat_id,
       text: `任务 ${task_id} 当前状态 ${record.status} 不支持此(run)操作`
@@ -267,11 +264,12 @@ async function tg_run({ task_id, chat_id }) {
     fid: record.source,
     target: record.target,
     chat_id,
+    update: type == "update",
     note: record.note
   });
 }
 
-async function tg_copy({ fid, target, chat_id, note }) {
+async function tg_copy({ fid, target, chat_id, note, update }) {
   // return task_id
   target = target || DEFAULT_TARGET;
   if (!target) {
@@ -290,15 +288,29 @@ async function tg_copy({ fid, target, chat_id, note }) {
     if (record.status === "copying") {
       sm({
         chat_id,
-        text:
-          "已有相同源ID和目的ID的任务正在进行，查询进度可输入 /task " +
-          record.id
+        text: `已有相同源ID和目的ID的任务${record.id} (文件夹: ${
+          record.name
+        })正在进行，查询进度请输入 "/task ${record.id}"`,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "任务${record.id}进度",
+                callback_data: `task ${record.id}`
+              }
+            ]
+          ]
+        }
       });
       return;
     } else if (record.status === "finished") {
       sm({
         chat_id,
-        text: "有相同源ID和目的ID的任务已复制完成，如需重新复制请更换目的地"
+        text: `有相同源ID和目的ID的任务${record.id} (文件夹: ${
+          record.name
+        })已复制完成。如需重新拷贝(自动跳过已复制文件)请输入 "/run ${
+          record.id
+        } update"`
       });
       return;
     }
@@ -308,6 +320,7 @@ async function tg_copy({ fid, target, chat_id, note }) {
     source: fid,
     target,
     note,
+    update,
     not_teamdrive: true,
     service_account: true,
     is_server: true

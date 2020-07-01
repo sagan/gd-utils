@@ -139,7 +139,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
     } else if (command == "clear") {
       tg_clear({ chat_id, type: params[0] });
     } else if (command == "run") {
-      tg_run({ chat_id, task_id: params[0] });
+      tg_run({ chat_id, task_id: params[0], type: params[1] });
     } else {
       sm({ chat_id, text: `未找到 ${command} 命令` });
     }
