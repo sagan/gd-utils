@@ -189,13 +189,13 @@ ${note}
     text: "源信息",
     callback_data: `count ${source}`
   });
-  inline_keyboard[0].push({
-    text: "重新统计源",
-    callback_data: `count ${source} update`
-  });
   if (status == "finished" && new_folder) {
     inline_keyboard[0].push({
-      text: "统计复制",
+      text: "重新统计源",
+      callback_data: `count ${source} update`
+    });
+    inline_keyboard[0].push({
+      text: "复制信息",
       callback_data: `count ${new_folder}`
     });
     inline_keyboard[0].push({
