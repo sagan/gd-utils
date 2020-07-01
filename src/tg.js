@@ -80,8 +80,8 @@ async function send_all_tasks(chat_id) {
     records
       .filter((a) => a.status == "copying" || a.status == "interrupt")
       .slice(-5)
-      .map(({ id }) =>
-        a.status == "copying"
+      .map(({ id, status }) =>
+        status == "copying"
           ? { text: `任务${id}进度`, callback_data: `task ${id}` }
           : { text: `恢复${id}任务`, callback_data: `run ${id}` }
       )
