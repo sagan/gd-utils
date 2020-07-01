@@ -78,7 +78,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
     if (command == "help") {
       send_help(chat_id);
     } else if (command == "count") {
-      const [fid] = params;
+      let [fid] = params;
       if (!fid) {
         sm({ chat_id, text: `命令参数不正确` });
       } else if (counting[fid]) {
@@ -95,7 +95,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
         }
       }
     } else if (command == "copy") {
-      const [fid, target] = params;
+      let [fid, target] = params;
       if (!fid) {
         sm({ chat_id, text: `命令参数不正确` });
       } else if (target && !validate_fid(target)) {
@@ -116,7 +116,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
         });
       }
     } else if (command == "task") {
-      const [task_id] = params;
+      let [task_id] = params;
       if (!task_id || task_id === "all") {
         send_all_tasks(chat_id);
       } else {
