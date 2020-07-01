@@ -2,13 +2,88 @@
 
 > 不只是最快的 google drive 拷贝工具 [与其他工具的对比](./compare.md)
 
+## 一键安装脚本(感谢 脚本制作者 [@vitaminx](https://github.com/vitaminx))
+> 如果你没有Linux操作经验或者是新开的vps，可尝试使用此脚本
+
+- 首先准备好以下两个条件：
+  - 在Telegram上注册好机器人并取得并记录下该机器人TOKEN
+  - 一个域名在cloudflare解析到该机器人所在VPS的IP
+- 准备好以上两个条件后，复制以下内容粘贴到VPS命令行窗口回车即可
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/iwestlin/gd-utils/master/gdutilsinstall.sh)"
+```
+- 安装过程中需要输入一下四个参数：
+  - 机器人TOKEN：这个在Telegram里面找“@BotFather”注册即可获得
+  - 自己的的Telegram username：在Telegram里面直接查看
+  - web服务名：这是个是很重要的识别标志，请设置为你的域名（格式：abc.34513.com）
+  - 域名网址全称：你在cloudflare上解析到VPS的域名网址全称（格式：https://abc.34513.com）
+- 测试可用完美安装系统：
+  - Centos 7/8
+  - debian 9/10
+  - ubuntu 16.04/18.04/19.10/20.04
+
+## demo
+[https://drive.google.com/drive/folders/124pjM5LggSuwI1n40bcD5tQ13wS0M6wg](https://drive.google.com/drive/folders/124pjM5LggSuwI1n40bcD5tQ13wS0M6wg)
+
+## 更新日志
+[2020-06-30]
+
+- 命令行操作时，不换行输出进度信息，同时将进度信息输出间隔调整为1秒
+- 隐藏 timeout exceed 报错信息
+
+## 重要更新（2020-06-29）
+如果你遇到了以下几种问题，请务必阅读此节：
+
+- 任务异常中断
+- 命令行日志无限循环输出但进度不变
+- 复制完发现丢文件
+
+有不少网友遇到这些问题，但是作者一直无法复现，直到有tg网友发了张运行日志截图：
+![](./static/error-log.png)
+报错日志的意思是找不到对应的目录ID，这种情况会发生在SA没有对应目录的阅读权限的时候。
+当进行server side copy时，需要向Google的服务器提交要复制的文件ID，和复制的位置，也就是新创建的目录ID，由于在请求时是随机选取的SA，所以当选中没有权限的SA时，这次拷贝请求没有对应目录的权限，就会发生图中的错误。
+
+**所以，上述这些问题的源头是，sa目录下，混杂了没有权限的json文件！**
+
+以下是解决办法：
+- 在项目目录下，执行 `git pull` 拉取最新代码
+- 执行 `./validate-sa.js -h` 查看使用说明
+- 选择一个你的sa拥有阅读权限的目录ID，执行 `./validate-sa.js 你的目录ID`
+
+程序会读取sa目录下所有json文件，依次检查它们是否拥有对 `你的目录ID` 的阅读权限，如果最后发现了无效的SA，程序会提供选项允许用户将无效的sa json移动到特定目录。
+
+将无效sa文件移动以后，如果你使用了pm2启动，需要 `pm2 reload server` 重启下进程。
+
+操作示例： [https://drive.google.com/drive/folders/1iiTAzWF_v9fo_IxrrMYiRGQ7QuPrnxHf](https://drive.google.com/drive/folders/1iiTAzWF_v9fo_IxrrMYiRGQ7QuPrnxHf)
+
 ## 常见问题
-项目发布一天以内，作者至少收到100种无法配置成功的反馈。。忙得焦头烂额，暂时没空做搭建过程的录屏。
 下面是一些网友的踩坑心得，如果你配置的时候也不小心掉进坑里，可以进去找找有没有解决办法：
 
 - [ikarosone 基于宝塔的搭建过程](https://www.ikarosone.top/archives/195.html)
 
 - [@greathappyforest 踩的坑](doc/tgbot-appache2-note.md)
+
+在命令行操作时如果输出 `timeout exceed` 这样的消息，是正常情况，不会影响最终结果，因为程序对每个请求都有7次重试的机制。
+如果timeout的消息比较多，可以考虑降低并行请求数，下文有具体方法。
+
+复制结束后，如果最后输出的消息里有 `未读取完毕的目录ID`，只需要在命令行执行上次同样的拷贝命令，选continue即可继续。
+
+如果你成功复制完以后，统计新的文件夹链接发现文件数比源文件夹少，说明Google正在更新数据库，请给它一点时间。。一般等半小时再统计数据会比较完整。
+
+如果你使用tg操作时，发送拷贝命令以后，/task 进度始终未开始（在复制文件数超多的文件夹时常会发生），是正常现象。
+这是因为程序正在获取源文件夹的所有文件信息。它的运行机制严格按照以下顺序：
+```
+1、获取源文件夹所有文件信息
+2、根据源文件夹的目录结构，在目标文件夹创建目录
+3、所有目录创建完成后，开始复制文件
+```
+
+**如果源文件夹的文件数非常多（一百万以上），请一定在命令行进行操作**，因为程序运行的时候会把文件信息保存在内存中，文件数太多的话容易内存占用太多被nodejs干掉。可以像这样执行命令：
+```
+ node --max-old-space-size=4096 count folder-id -S
+ ```
+这样进程就能最大占用4G内存了。
+
 
 ## 搭建过程
 [https://drive.google.com/drive/folders/1Lu7Cwh9lIJkfqYDIaJrFpzi8Lgdxr4zT](https://drive.google.com/drive/folders/1Lu7Cwh9lIJkfqYDIaJrFpzi8Lgdxr4zT)
@@ -21,7 +96,7 @@
 
 ## 功能简介
 本工具目前支持以下功能：
-- 统计任意（您拥有相关权限的，下同，不再赘述）目录的文件信息，且支持以各种形式（html, table, json）导出。  
+- 统计任意（您拥有相关权限的，下同，不再赘述）目录的文件信息，且支持以各种形式（html, table, json）导出。
 支持中断恢复，且统计过的目录（包括其所有子孙目录）信息会记录在本地数据库文件中（gdurl.sqlite）
 请在本项目目录下命令行输入 `./count -h` 查看使用帮助
 
@@ -34,9 +109,6 @@
 - 在 config.js 里完成相关配置后，可以将本项目部署在（可正常访问谷歌服务的）服务器上，提供 http api 文件统计接口
 
 - 支持 telegram bot，配置完成后，上述功能均可通过 bot 进行操作
-
-## demo
-[https://drive.google.com/drive/folders/124pjM5LggSuwI1n40bcD5tQ13wS0M6wg](https://drive.google.com/drive/folders/124pjM5LggSuwI1n40bcD5tQ13wS0M6wg)
 
 ## 环境配置
 本工具需要安装nodejs，客户端安装请访问[https://nodejs.org/zh-cn/download/](https://nodejs.org/zh-cn/download/)，服务器安装可参考[https://github.com/nodesource/distributions/blob/master/README.md#debinstall](https://github.com/nodesource/distributions/blob/master/README.md#debinstall)
@@ -70,7 +142,7 @@ http_proxy="YOUR_PROXY_URL" && https_proxy=$http_proxy && HTTP_PROXY=$http_proxy
 - 命令行执行 `rclone config file` 找到 rclone 的配置文件路径
 - 打开这个配置文件 `rclone.conf`, 找到 `client_id`, `client_secret` 和 `refresh_token` 这三个变量，将其分别填入本项目下的 `config.js` 中，需要注意这三个值必须被成对的英文引号包裹，且引号后以英文逗号结尾，也就是需要符合JavaScript的[对象语法](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/Object_initializer)
 
-如果你没有配置过rclone，可以搜索`rclone google drive 教程`完成相关配置。  
+如果你没有配置过rclone，可以搜索`rclone google drive 教程`完成相关配置。
 
 如果你的`rclone.conf`里没有`client_id`和`client_secret`，说明你配置rclone的时候默认用了rclone自己的client_id，连rclone自己[都不建议这样做](https://github.com/rclone/rclone/blob/8d55367a6a2f47a1be7e360a872bd7e56f4353df/docs/content/drive.md#making-your-own-client_id)，因为大家共享了它的接口调用限额，在使用高峰期可能会触发限制。
 
@@ -158,12 +230,6 @@ const DEFAULT_TARGET = '' // 必填，拷贝默认目的地ID，如果不指定t
 
 ## 注意事项
 程序的原理是调用了[google drive官方接口](https://developers.google.com/drive/api/v3/reference/files/list)，递归获取目标文件夹下所有文件及其子文件夹信息，粗略来讲，某个目录下包含多少个文件夹，就至少需要这么多次请求才能统计完成。
-
-如果你要统计的文件数非常多（一百万以上），请一定在命令行进行操作，因为程序运行的时候会把文件信息保存在内存中，文件数太多的话容易内存占用太多被nodejs干掉。可以像这样执行命令：
-```
- node --max-old-space-size=4096 count folder-id -S
- ```
-这样进程就能最大占用4G内存了。
 
 目前尚不知道google是否会对接口做频率限制，也不知道会不会影响google账号本身的安全。
 
