@@ -78,7 +78,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
     if (command == "help") {
       send_help(chat_id);
     } else if (command == "count") {
-      let [fid] = params;
+      let [fid, type] = params;
       if (!fid) {
         sm({ chat_id, text: `命令参数不正确` });
       } else if (counting[fid]) {
@@ -86,7 +86,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
       } else {
         try {
           counting[fid] = true;
-          await send_count({ fid, chat_id });
+          await send_count({ fid, chat_id, update: type == "update" });
         } catch (err) {
           console.error(err);
           sm({ chat_id, text: fid + " 统计失败：" + err.message });

@@ -35,9 +35,9 @@ function send_help(chat_id) {
 
 /run taskID | 重新开始运行(已中断的)任务
 
-/clear [type] | 清除已完成任务信息；如果 type 为 destroy, 会清空所有数据
+/clear [type] | 清除已完成任务信息；如果 type 为 destroy, 会清空所有数据。如果 type 为 cache，会清空本地缓存的(之前复制任务的)Google Drive 文件信息。
 
-/count shareID | 返回sourceID的文件统计信息, sourceID可以是 google drive分享网址本身，也可以是分享ID
+/count shareID [type] | 返回sourceID的文件统计信息, sourceID 是 google drive 分享网址或分享ID。type 为 update 则(忽略本地缓存)重新进行统计
 
 /copy sourceID [targetID] | 将sourceID的文件复制到targetID里（会新建一个文件夹），若不提供 targetID，则会复制到默认位置（在config.js里设置）。返回拷贝任务的taskID
 
@@ -46,7 +46,19 @@ function send_help(chat_id) {
 {其它任意文本} | 识别文本里出现的(第1个) Google Drive 分享链接或 ID 并提供选项以转存
 
 </pre>`;
-  return sm({ chat_id, text, parse_mode: "HTML" });
+  return sm({
+    chat_id,
+    text,
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "清除缓存", callback_data: `clear cache` },
+          { text: "所有任务", callback_data: `task` }
+        ]
+      ]
+    }
+  });
 }
 
 function send_choice({ fid, chat_id, note }) {
@@ -171,13 +183,21 @@ ${note}
 
   let inline_keyboard = [[]];
   inline_keyboard[0].push({
-    text: "统计源",
+    text: "源信息",
     callback_data: `count ${source}`
+  });
+  inline_keyboard[0].push({
+    text: "重新统计源",
+    callback_data: `count ${source} update`
   });
   if (status == "finished") {
     inline_keyboard[0].push({
-      text: "统计已复制",
+      text: "复制信息",
       callback_data: `count ${target}`
+    });
+    inline_keyboard[0].push({
+      text: "重新统计复制",
+      callback_data: `count ${target} update`
     });
   } else {
     inline_keyboard[0].push({
@@ -205,6 +225,12 @@ async function tg_clear({ chat_id, type }) {
       reply_markup: {
         inline_keyboard: [[{ text: "所有任务", callback_data: `task` }]]
       }
+    });
+  } else if (type == "cache") {
+    db.prepare("delete from gd").run();
+    return sm({
+      chat_id,
+      text: `已清空所有文件缓存`
     });
   } else if (type == "destroy") {
     db.prepare("delete from task").run();
@@ -297,8 +323,8 @@ async function tg_copy({ fid, target, chat_id, note }) {
         reply_markup: {
           inline_keyboard: [
             [
-              { text: "统计源", callback_data: `count ${fid}` },
-              { text: "统计复制", callback_data: `count ${target}` },
+              { text: "源信息", callback_data: `count ${fid}` },
+              { text: "复制信息", callback_data: `count ${target}` },
               { text: "所有任务", callback_data: `task` }
             ]
           ]
@@ -335,10 +361,11 @@ function reply_cb_query({ id, data }) {
   });
 }
 
-async function send_count({ fid, chat_id }) {
+async function send_count({ fid, chat_id, update }) {
   const table = await gen_count_body({
     fid,
     type: "tg",
+    update,
     service_account: true
   });
   const url = `https://api.telegram.org/bot${tg_token}/sendMessage`;
