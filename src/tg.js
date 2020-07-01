@@ -155,16 +155,19 @@ async function send_task_info({ task_id, chat_id }) {
     ctime,
     ftime
   } = record;
+  const folder_mapping = mapping && mapping.trim().split("\n");
+  const new_folder = folder_mapping && folder_mapping[0].split(" ")[1];
   const { summary } =
     db.prepare("select summary from gd where fid = ?").get(source) || {};
   const { file_count, folder_count, total_size } = summary
     ? JSON.parse(summary)
     : {};
   const copied_files = copied ? copied.trim().split("\n").length : 0;
-  const copied_folders = mapping ? mapping.trim().split("\n").length - 1 : 0;
+  const copied_folders = folder_mapping ? folder_mapping.length - 1 : 0;
   let text = `任务编号: ${task_id}
-源ID: ${gen_link(source)}
-目的ID: ${gen_link(target)}
+源文件夹ID: ${gen_link(source)}
+目的位置ID: ${gen_link(target)}
+新文件夹ID: ${new_folder ? gen_link(new_folder) : "暂未创建"}
 文件夹名称: ${name}
 任务状态: ${status}
 创建时间: ${dayjs(ctime).format()}
@@ -190,14 +193,14 @@ ${note}
     text: "重新统计源",
     callback_data: `count ${source} update`
   });
-  if (status == "finished") {
+  if (status == "finished" && new_folder) {
     inline_keyboard[0].push({
-      text: "复制信息",
-      callback_data: `count ${target}`
+      text: "统计复制",
+      callback_data: `count ${new_folder}`
     });
     inline_keyboard[0].push({
       text: "重新统计复制",
-      callback_data: `count ${target} update`
+      callback_data: `count ${new_folder} update`
     });
   } else {
     inline_keyboard[0].push({
