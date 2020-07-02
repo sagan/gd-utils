@@ -466,7 +466,7 @@ async function get_info_by_id(fid, use_sa) {
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
     corpora: "allDrives",
-    fields: "id,name,owners"
+    fields: "id,name,owners,mimeType"
   };
   url += "?" + params_to_query(params);
   const headers = await gen_headers(use_sa);
