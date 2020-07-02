@@ -291,7 +291,7 @@ async function tg_copy({ fid, target, chat_id, note, update }) {
     if (record.status === "copying") {
       sm({
         chat_id,
-        text: `已有相同源ID和目的ID的任务${record.id} (文件夹: ${
+        text: `已有相同源ID和目的ID的任务${record.id} (名称: ${
           record.name
         })正在进行，查询进度请输入 "/task ${record.id}"`,
         reply_markup: {
@@ -328,7 +328,14 @@ async function tg_copy({ fid, target, chat_id, note, update }) {
     service_account: true,
     is_server: true
   })
-    .then((folder) => {
+    .then(({ folder, file }) => {
+      if (file) {
+        sm({
+          chat_id,
+          text: `${fid} 是单个文件，已复制到：${gen_link(target)} 目录下`
+        });
+        return;
+      }
       if (!record) record = {}; // 防止无限循环
       if (!folder) return;
       const link = "https://drive.google.com/drive/folders/" + folder.id;
@@ -444,6 +451,9 @@ function extract_fid(text) {
       const u = new URL(url);
       if (u.pathname.includes("/folders/")) {
         match = u.pathname.match(/\/folders\/([-_a-zA-Z0-9]{10,100})/);
+        return match && match[1];
+      } else if (u.pathname.includes("/file/d/")) {
+        match = u.pathname.match(/\/file\/d\/([-_a-zA-Z0-9]{10,100})/);
         return match && match[1];
       }
       return u.searchParams.get("id");

@@ -389,10 +389,54 @@ function validate_fid(fid) {
   return fid.match(reg);
 }
 
+async function create_txt(name, parent, use_sa, content) {
+  if (!content) {
+    return;
+  }
+  const headers = await gen_headers(use_sa);
+  let noteFile;
+  retry = 0;
+  while (retry++ < 3) {
+    try {
+      noteFile = (await axins.post(
+        `https://www.googleapis.com/drive/v3/files?supportsAllDrives=true`,
+        { name: `${name}.txt`, parents: [parent] },
+        { headers }
+      )).data;
+      break;
+    } catch (e) {
+      console.log(`Error: add ${name}.txt`);
+      axiosErrorLogger(e);
+    }
+  }
+  if (noteFile) {
+    let data = !Buffer.isBuffer(content) ? Buffer.from(content) : content;
+    retry = 0;
+    while (retry++ < 3) {
+      try {
+        await axins.patch(
+          `https://www.googleapis.com/upload/drive/v3/files/${
+            noteFile.id
+          }?uploadType=media&supportsAllDrives=true`,
+          data,
+          {
+            headers: Object.assign({}, headers, {
+              ["Content-Type"]: "text/plain",
+              ["Content-Length"]: data.byteLength
+            })
+          }
+        );
+        break;
+      } catch (e) {
+        console.log(`Error: put ${name}.txt`);
+        axiosErrorLogger(e);
+      }
+    }
+  }
+}
+
 async function create_folder(name, parent, use_sa, note) {
-  let url = `https://www.googleapis.com/drive/v3/files`;
-  const params = { supportsAllDrives: true };
-  url += "?" + params_to_query(params);
+  let url = `https://www.googleapis.com/drive/v3/files?supportsAllDrives=true`;
   const post_data = {
     name,
     mimeType: FOLDER_TYPE,
@@ -410,46 +454,8 @@ async function create_folder(name, parent, use_sa, note) {
       console.log("创建目录重试中：", name, "重试次数：", retry);
     }
   }
-  if (data && note) {
-    let noteFile;
-    retry = 0;
-    while (retry++ < 3) {
-      try {
-        noteFile = (await axins.post(
-          url,
-          { name: `${name}.txt`, parents: [parent] },
-          { headers }
-        )).data;
-        break;
-      } catch (e) {
-        console.log(`Error: add ${name}.txt note`);
-        axiosErrorLogger(e);
-      }
-    }
-    if (noteFile) {
-      let data = Buffer.from(note);
-      retry = 0;
-      while (retry++ < 3) {
-        try {
-          await axins.patch(
-            `https://www.googleapis.com/upload/drive/v3/files/${
-              noteFile.id
-            }?uploadType=media&supportsAllDrives=true`,
-            data,
-            {
-              headers: Object.assign({}, headers, {
-                ["Content-Type"]: "text/plain",
-                ["Content-Length"]: data.byteLength
-              })
-            }
-          );
-          break;
-        } catch (e) {
-          console.log(`Error: put ${name}.txt note`);
-          axiosErrorLogger(e);
-        }
-      }
-    }
+  if (data) {
+    await create_txt(name, parent, use_sa, note);
   }
   return data;
 }
@@ -543,11 +549,18 @@ async function real_copy({
   is_server,
   note = ""
 }) {
+  const source_info = await get_info_by_id(source, service_account);
+
+  if (source_info.mimeType !== FOLDER_TYPE) {
+    let file = await copy_file(source_info.id, target);
+    await create_txt(`${source_info.name}.txt`, target, service_account, note);
+    return { file };
+  }
+
   async function get_new_root() {
     if (name) {
       return create_folder(name, target, service_account, note);
     } else {
-      const source_info = await get_info_by_id(source, service_account);
       return create_folder(source_info.name, target, service_account, note);
     }
   }
@@ -558,7 +571,8 @@ async function real_copy({
   if (record) {
     const choice = is_server ? "continue" : await user_choose();
     if (choice === "exit") {
-      return console.log("退出程序");
+      console.log("退出程序");
+      return {};
     } else if (choice === "continue") {
       let { copied, mapping } = record;
       const copied_ids = {};
@@ -609,7 +623,7 @@ async function real_copy({
         Date.now(),
         record.id
       );
-      return { id: root }; // todo 加上task_id
+      return { folder: { id: root } }; // todo 加上task_id
     } else if (choice === "restart") {
       const new_root = await get_new_root();
       if (!new_root)
@@ -647,10 +661,11 @@ async function real_copy({
         Date.now(),
         record.id
       );
-      return new_root;
+      return { folder: new_root };
     } else {
       // ctrl+c 退出
-      return console.log("退出程序");
+      console.log("退出程序");
+      return {};
     }
   } else {
     const new_root = await get_new_root();
@@ -699,7 +714,7 @@ async function real_copy({
       Date.now(),
       lastInsertRowid
     );
-    return new_root;
+    return { folder: new_root };
   }
 }
 
