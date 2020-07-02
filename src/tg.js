@@ -384,6 +384,7 @@ async function send_count({ fid, chat_id, update }) {
     update,
     service_account: true
   });
+  if (!table) return sm({ chat_id, text: `获取 ${gen_link(fid)} 信息失败` });
   const url = `https://api.telegram.org/bot${tg_token}/sendMessage`;
   const gd_link = `https://drive.google.com/drive/folders/${fid}`;
   return axins
