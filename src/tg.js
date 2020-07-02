@@ -330,6 +330,8 @@ async function tg_copy({ fid, target, chat_id, note, update }) {
   })
     .then(({ folder, file }) => {
       if (file) {
+        const gen_link = (fid) =>
+          `<a href="https://drive.google.com/drive/folders/${fid}">${fid}</a>`;
         sm({
           chat_id,
           text: `${fid} 是单个文件，已复制到：${gen_link(target)} 目录下`

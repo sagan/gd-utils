@@ -553,7 +553,7 @@ async function real_copy({
 
   if (source_info.mimeType !== FOLDER_TYPE) {
     let file = await copy_file(source_info.id, target);
-    await create_txt(`${source_info.name}.txt`, target, service_account, note);
+    await create_txt(source_info.name, target, service_account, note);
     return { file };
   }
 
