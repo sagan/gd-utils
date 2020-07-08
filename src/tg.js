@@ -5,10 +5,19 @@ const HttpsProxyAgent = require("https-proxy-agent");
 
 const { db } = require("../db");
 const { gen_count_body, validate_fid, real_copy } = require("./gd");
-const { AUTH, DEFAULT_TARGET, HTTPS_PROXY } = require("../config.loader");
+const {
+  AUTH,
+  DEFAULT_TARGET,
+  HTTPS_PROXY,
+  USE_PERSONAL_AUTH
+} = require("../config.loader");
 const { tg_token } = AUTH;
+const gen_link = (fid, text) =>
+  `<a href="https://drive.google.com/drive/folders/${fid}">${text || fid}</a>`;
 
-if (!tg_token) throw new Error("未配置tg_token");
+if (!tg_token) {
+  throw new Error("未配置tg_token");
+}
 const axins = axios.create(
   HTTPS_PROXY ? { httpsAgent: new HttpsProxyAgent(HTTPS_PROXY) } : {}
 );
@@ -33,7 +42,7 @@ function send_help(chat_id) {
 
 /help | 返回本条使用说明
 
-/run taskID | 重新开始运行(已中断的)任务
+/run taskID [type] | 重新开始运行(已中断的)任务。type 为 update 为重新检测源。
 
 /clear [type] | 清除已完成任务信息；如果 type 为 destroy, 会清空所有数据。
 
@@ -138,31 +147,23 @@ async function send_all_tasks(chat_id) {
     });
 }
 
-async function send_task_info({ task_id, chat_id }) {
+async function get_task_info(task_id) {
   const record = db.prepare("select * from task where id=?").get(task_id);
-  if (!record) return sm({ chat_id, text: "数据库不存在此任务ID：" + task_id });
-
-  const gen_link = (fid) =>
-    `<a href="https://drive.google.com/drive/folders/${fid}">${fid}</a>`;
-  const {
-    source,
-    target,
-    status,
-    copied,
-    mapping,
-    name,
-    note,
-    ctime,
-    ftime
-  } = record;
+  if (!record) {
+    return {};
+  }
+  const { source, target, status, mapping, ctime, ftime } = record;
+  const { copied_files } = db
+    .prepare("select count(fileid) as copied_files from copied where taskid=?")
+    .get(task_id);
   const folder_mapping = mapping && mapping.trim().split("\n");
   const new_folder = folder_mapping && folder_mapping[0].split(" ")[1];
   const { summary } =
-    db.prepare("select summary from gd where fid = ?").get(source) || {};
+    db.prepare("select summary from gd where fid=?").get(source) || {};
   const { file_count, folder_count, total_size } = summary
     ? JSON.parse(summary)
     : {};
-  const copied_files = copied ? copied.trim().split("\n").length : 0;
+  const total_count = (file_count || 0) + (folder_count || 0);
   const copied_folders = folder_mapping ? folder_mapping.length - 1 : 0;
   let text = `任务编号: ${task_id}
 源文件夹ID: ${gen_link(source)}
@@ -178,12 +179,20 @@ async function send_task_info({ task_id, chat_id }) {
 文件进度: ${copied_files} / ${
     file_count === undefined ? "未知数量" : file_count
   }
-总大小: ${total_size || "未知大小"}
+总百分比: ${(((copied_files + copied_folders) * 100) / total_count).toFixed(2)}%
+合计大小: ${total_size || "未知大小"}
 文件备注:
 
 ${note}
 `;
+  return { text, status, folder_count };
+}
 
+async function send_task_info({ task_id, chat_id }) {
+  const { text, status, folder_count } = await get_task_info(task_id);
+  if (!text) {
+    return sm({ chat_id, text: `数据库不存在此任务ID ${task_id}` });
+  }
   let inline_keyboard = [[]];
   inline_keyboard[0].push({
     text: "源信息",
@@ -232,6 +241,7 @@ async function tg_clear({ chat_id, type }) {
   } else if (type == "destroy") {
     db.prepare("delete from task").run();
     db.prepare("delete from gd").run();
+    db.prepare("delete from copied").run();
     return sm({
       chat_id,
       text: `已清空所有数据`
@@ -325,7 +335,7 @@ async function tg_copy({ fid, target, chat_id, note, update }) {
     note,
     update,
     not_teamdrive: true,
-    service_account: true,
+    service_account: !USE_PERSONAL_AUTH,
     is_server: true
   })
     .then(({ folder, file }) => {
@@ -387,11 +397,15 @@ function reply_cb_query({ id, data }) {
 }
 
 async function send_count({ fid, chat_id, update }) {
+  sm({
+    chat_id,
+    text: `开始获取 ${fid} 所有文件信息，请稍候，建议统计完成前先不要开始复制，因为复制也需要先获取源文件夹信息`
+  });
   const table = await gen_count_body({
     fid,
     type: "tg",
     update,
-    service_account: true
+    service_account: !USE_PERSONAL_AUTH
   });
   if (!table) {
     return sm({
@@ -417,7 +431,7 @@ ${table}</pre>`
         const smy = await gen_count_body({
           fid,
           type: "json",
-          service_account: true
+          service_account: !USE_PERSONAL_AUTH
         });
         const { file_count, folder_count, total_size } = JSON.parse(smy);
         return sm({

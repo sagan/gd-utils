@@ -1,7 +1,9 @@
 drop index IF EXISTS "gd_fid";
 drop index IF EXISTS "task_source_target";
+drop index IF EXISTS "copied_taskid";
 drop table IF EXISTS "gd";
 drop table IF EXISTS "task";
+drop table IF EXISTS "copied";
 
 CREATE TABLE "gd" (
   "id"  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
@@ -34,3 +36,10 @@ CREATE UNIQUE INDEX "task_source_target" ON "task" (
   "source",
   "target"
 );
+
+CREATE TABLE "copied" (
+  "taskid"  INTEGER,
+  "fileid"  TEXT
+);
+
+CREATE INDEX "copied_taskid" ON "copied" ("taskid");

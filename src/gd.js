@@ -22,22 +22,33 @@ const {
 const { db } = require("../db");
 const { make_table, make_tg_table, make_html, summary } = require("./summary");
 
+const FILE_EXCEED_MSG = "您的团队盘文件数已超限(40万)，停止复制";
 const FOLDER_TYPE = "application/vnd.google-apps.folder";
+const sleep = (ms) => new Promise((resolve, reject) => setTimeout(resolve, ms));
 const { https_proxy } = process.env;
 const axins = axios.create(
   https_proxy ? { httpsAgent: new HttpsProxyAgent(https_proxy) } : {}
 );
 
-const sa_files = fs
+const SA_BATCH_SIZE = 50;
+const SA_FILES = fs
   .readdirSync(path.join(__dirname, "../sa"))
   .filter((v) => v.endsWith(".json"));
-let SA_TOKENS = sa_files.map((filename) => {
-  const gtoken = new GoogleToken({
-    keyFile: path.join(__dirname, "../sa", filename),
-    scope: ["https://www.googleapis.com/auth/drive"]
+SA_FILES.flag = 0;
+let SA_TOKENS = get_sa_batch();
+
+function get_sa_batch() {
+  const new_flag = SA_FILES.flag + SA_BATCH_SIZE;
+  const files = SA_FILES.slice(SA_FILES.flag, new_flag);
+  SA_FILES.flag = new_flag;
+  return files.map((filename) => {
+    const gtoken = new GoogleToken({
+      keyFile: path.join(__dirname, "../sa", filename),
+      scope: ["https://www.googleapis.com/auth/drive"]
+    });
+    return { gtoken, expires: 0 };
   });
-  return { gtoken, expires: 0 };
-});
+}
 
 handle_exit(() => {
   // console.log('handle_exit running')
@@ -188,9 +199,9 @@ async function walk_and_save({ fid, not_teamdrive, update, service_account }) {
 
   const loop = setInterval(() => {
     const now = dayjs().format("HH:mm:ss");
-    const message = `${now} | 已获取对象 ${
-      result.length
-    } | 排队等候的网络请求 ${limit.pendingCount}`;
+    const message = `${now} | 已获取对象 ${result.length} | 网络请求 进行中${
+      limit.activeCount
+    }/排队中${limit.pendingCount}`;
     print_progress(message);
   }, 1000);
 
@@ -212,8 +223,12 @@ async function walk_and_save({ fid, not_teamdrive, update, service_account }) {
         should_save = true;
       }
     }
-    if (!files) return;
-    if (files.not_finished) not_finished.push(parent);
+    if (!files) {
+      return;
+    }
+    if (files.not_finished) {
+      not_finished.push(parent);
+    }
     should_save && save_files_to_db(parent, files);
     const folders = files.filter((v) => v.mimeType === FOLDER_TYPE);
     files.forEach((v) => (v.parent = parent));
@@ -280,7 +295,7 @@ async function ls_folder({ fid, not_teamdrive, service_account }) {
     const payload = { headers, timeout: TIMEOUT_BASE };
     let retry = 0;
     let data;
-    while (!data && retry < RETRY_LIMIT) {
+    while (!data && (retry < RETRY_LIMIT || RETRY_LIMIT <= 0)) {
       try {
         data = (await axins.get(url, payload)).data;
       } catch (err) {
@@ -302,7 +317,7 @@ async function ls_folder({ fid, not_teamdrive, service_account }) {
 }
 
 async function gen_headers(use_sa) {
-  use_sa = use_sa && SA_TOKENS.length;
+  // use_sa = use_sa && SA_TOKENS.length
   const access_token = use_sa
     ? (await get_sa_token()).access_token
     : await get_access_token();
@@ -344,36 +359,36 @@ async function get_access_token() {
 }
 
 async function get_sa_token() {
-  let tk;
+  if (!SA_TOKENS.length) {
+    SA_TOKENS = get_sa_batch();
+  }
   while (SA_TOKENS.length) {
-    tk = get_random_element(SA_TOKENS);
+    const tk = get_random_element(SA_TOKENS);
     try {
       return await real_get_sa_token(tk);
     } catch (e) {
       console.log(e);
       SA_TOKENS = SA_TOKENS.filter((v) => v.gtoken !== tk.gtoken);
+      if (!SA_TOKENS.length) {
+        SA_TOKENS = get_sa_batch();
+      }
     }
   }
   throw new Error("没有可用的SA帐号");
 }
 
-function real_get_sa_token(el) {
+async function real_get_sa_token(el) {
   const { value, expires, gtoken } = el;
   // 把gtoken传递出去的原因是当某账号流量用尽时可以依此过滤
-  if (Date.now() < expires) return { access_token: value, gtoken };
-  return new Promise((resolve, reject) => {
-    gtoken.getToken((err, tokens) => {
-      if (err) {
-        reject(err);
-      } else {
-        // console.log('got sa token', tokens)
-        const { access_token, expires_in } = tokens;
-        el.value = access_token;
-        el.expires = Date.now() + 1000 * (expires_in - 60 * 5); // 提前5分钟判定为过期
-        resolve({ access_token, gtoken });
-      }
-    });
+  if (Date.now() < expires) {
+    return { access_token: value, gtoken };
+  }
+  const { access_token, expires_in } = await gtoken.getToken({
+    forceRefresh: true
   });
+  el.value = access_token;
+  el.expires = Date.now() + 1000 * (expires_in - 60 * 5); // 提前5分钟判定为过期
+  return { access_token, gtoken };
 }
 
 function get_random_element(arr) {
@@ -381,7 +396,9 @@ function get_random_element(arr) {
 }
 
 function validate_fid(fid) {
-  if (!fid) return false;
+  if (!fid) {
+    return false;
+  }
   fid = String(fid);
   const whitelist = ["root", "appDataFolder", "photos"];
   if (whitelist.includes(fid)) return true;
@@ -436,7 +453,7 @@ async function create_txt(name, parent, use_sa, content) {
   }
 }
 
-async function create_folder(name, parent, use_sa, note) {
+async function create_folder(name, parent, use_sa, limit, note) {
   let url = `https://www.googleapis.com/drive/v3/files?supportsAllDrives=true`;
   const post_data = {
     name,
@@ -444,21 +461,29 @@ async function create_folder(name, parent, use_sa, note) {
     parents: [parent]
   };
   let retry = 0;
-  let data;
-  const headers = await gen_headers(use_sa);
-  while (!data && retry < RETRY_LIMIT) {
+  let err_message;
+  while (retry < RETRY_LIMIT || RETRY_LIMIT <= 0) {
     try {
-      data = (await axins.post(url, post_data, { headers })).data;
+      const headers = await gen_headers(use_sa);
+      let { data } = await axins.post(url, post_data, { headers });
+      await create_txt(name, parent, use_sa, note);
+      return data;
     } catch (err) {
+      err_message = err.message;
       retry++;
       handle_error(err);
-      console.log("创建目录重试中：", name, "重试次数：", retry);
+      const data = err && err.response && err.response.data;
+      const message = data && data.error && data.error.message;
+      if (message && message.toLowerCase().includes("file limit")) {
+        if (limit) {
+          limit.clearQueue();
+        }
+        throw new Error(FILE_EXCEED_MSG);
+      }
+      console.log(`重试${retry}次创建目录 ${name}`);
     }
   }
-  if (data) {
-    await create_txt(name, parent, use_sa, note);
-  }
-  return data;
+  throw new Error(`创建目录 ${name} 出错：${err_message}`);
 }
 
 async function get_info_by_id(fid, use_sa) {
@@ -509,13 +534,16 @@ async function copy({
   is_server
 }) {
   target = target || DEFAULT_TARGET;
-  if (!target) throw new Error("目标位置不能为空");
+  if (!target) {
+    throw new Error("目标位置不能为空");
+  }
 
   const record = db
     .prepare("select id, status from task where source=? and target=?")
     .get(source, target);
-  if (record && record.status === "copying")
+  if (record && record.status === "copying") {
     return console.log("已有相同源和目的地的任务正在运行，强制退出");
+  }
 
   try {
     return await real_copy({
@@ -545,6 +573,7 @@ async function real_copy({
   name,
   min_size,
   update,
+  dncnr,
   not_teamdrive,
   service_account,
   is_server,
@@ -553,12 +582,13 @@ async function real_copy({
   const source_info = await get_info_by_id(source, service_account);
 
   if (source_info.mimeType !== FOLDER_TYPE) {
-    let file = await copy_file(source_info.id, target);
+    let file = await copy_file(source_info.id, target, service_account);
     await create_txt(source_info.name, target, service_account, note);
     return { file };
   }
 
   async function get_new_root() {
+    if (dncnr) return { id: target };
     if (name) {
       return create_folder(name, target, service_account, note);
     } else {
@@ -570,15 +600,18 @@ async function real_copy({
     .prepare("select * from task where source=? and target=?")
     .get(source, target);
   if (record) {
+    const copied = db
+      .prepare("select fileid from copied where taskid=?")
+      .all(record.id)
+      .map((v) => v.fileid);
     const choice = is_server ? "continue" : await user_choose();
     if (choice === "exit") {
       console.log("退出程序");
       return {};
     } else if (choice === "continue") {
-      let { copied, mapping } = record;
-      const copied_ids = {};
+      let { mapping } = record;
       const old_mapping = {};
-      copied = copied.trim().split("\n");
+      const copied_ids = {};
       copied.forEach((id) => (copied_ids[id] = true));
       mapping = mapping
         .trim()
@@ -599,10 +632,10 @@ async function real_copy({
       let files = arr
         .filter((v) => v.mimeType !== FOLDER_TYPE)
         .filter((v) => !copied_ids[v.id]);
-      if (min_size) files = files.filter((v) => v.size >= min_size);
-      const folders = arr
-        .filter((v) => v.mimeType === FOLDER_TYPE)
-        .filter((v) => !old_mapping[v.id]);
+      if (min_size) {
+        files = files.filter((v) => v.size >= min_size);
+      }
+      const folders = arr.filter((v) => v.mimeType === FOLDER_TYPE);
       console.log("待复制的目录数：", folders.length);
       console.log("待复制的文件数：", files.length);
       const all_mapping = await create_folders({
@@ -615,8 +648,9 @@ async function real_copy({
       });
       await copy_files({
         files,
-        mapping: all_mapping,
+        service_account,
         root,
+        mapping: all_mapping,
         task_id: record.id
       });
       db.prepare("update task set status=?, ftime=? where id=?").run(
@@ -624,21 +658,23 @@ async function real_copy({
         Date.now(),
         record.id
       );
-      return { folder: { id: root } }; // todo 加上task_id
+      return { id: root, task_id: record.id };
     } else if (choice === "restart") {
       const new_root = await get_new_root();
-      if (!new_root)
-        throw new Error("创建目录失败，请检查您的帐号是否有相应的权限");
       const root_mapping = source + " " + new_root.id + "\n";
-      db.prepare(
-        "update task set status=?, copied=?, mapping=? where id=?"
-      ).run("copying", "", root_mapping, record.id);
+      db.prepare("update task set status=?, mapping=? where id=?").run(
+        "copying",
+        root_mapping,
+        record.id
+      );
+      db.prepare("delete from copied where taskid=?").run(record.id);
       const arr = await walk_and_save({
         fid: source,
-        update: true,
+        update,
         not_teamdrive,
         service_account
       });
+
       let files = arr.filter((v) => v.mimeType !== FOLDER_TYPE);
       if (min_size) files = files.filter((v) => v.size >= min_size);
       const folders = arr.filter((v) => v.mimeType === FOLDER_TYPE);
@@ -654,6 +690,7 @@ async function real_copy({
       await copy_files({
         files,
         mapping,
+        service_account,
         root: new_root.id,
         task_id: record.id
       });
@@ -662,7 +699,7 @@ async function real_copy({
         Date.now(),
         record.id
       );
-      return { folder: new_root };
+      return { id: new_root.id, task_id: record.id };
     } else {
       // ctrl+c 退出
       console.log("退出程序");
@@ -670,8 +707,6 @@ async function real_copy({
     }
   } else {
     const new_root = await get_new_root();
-    if (!new_root)
-      throw new Error("创建目录失败，请检查您的帐号是否有相应的权限");
     const root_mapping = source + " " + new_root.id + "\n";
     const { lastInsertRowid } = db
       .prepare(
@@ -693,7 +728,9 @@ async function real_copy({
       service_account
     });
     let files = arr.filter((v) => v.mimeType !== FOLDER_TYPE);
-    if (min_size) files = files.filter((v) => v.size >= min_size);
+    if (min_size) {
+      files = files.filter((v) => v.size >= min_size);
+    }
     const folders = arr.filter((v) => v.mimeType === FOLDER_TYPE);
     console.log("待复制的目录数：", folders.length);
     console.log("待复制的文件数：", files.length);
@@ -707,6 +744,7 @@ async function real_copy({
     await copy_files({
       files,
       mapping,
+      service_account,
       root: new_root.id,
       task_id: lastInsertRowid
     });
@@ -715,50 +753,69 @@ async function real_copy({
       Date.now(),
       lastInsertRowid
     );
-    return { folder: new_root };
+    return { id: new_root.id, task_id: lastInsertRowid };
   }
 }
 
-async function copy_files({ files, mapping, root, task_id }) {
+async function copy_files({ files, mapping, service_account, root, task_id }) {
+  if (!files.length) return;
   console.log("\n开始复制文件，总数：", files.length);
-  const limit = pLimit(PARALLEL_LIMIT);
-  let count = 0;
+
   const loop = setInterval(() => {
-    const now = dayjs().format("HH:mm:ss");
-    const message = `${now} | 已复制文件数 ${count} | 排队等候的网络请求 ${
-      limit.pendingCount
-    }`;
-    print_progress(message);
+    print_progress(
+      `${dayjs().format("HH:mm:ss")} | 已复制文件数 ${count} | 排队中文件数 ${
+        files.length
+      }`
+    );
   }, 1000);
-  await Promise.all(
-    files.map(async (file) => {
-      try {
-        const { id, parent } = file;
-        const target = mapping[parent] || root;
-        const new_file = await limit(() => copy_file(id, target));
+
+  let count = 0;
+  let concurrency = 0;
+  let err;
+  do {
+    if (err) {
+      clearInterval(loop);
+      throw err;
+    }
+    if (concurrency > PARALLEL_LIMIT) {
+      await sleep(100);
+      continue;
+    }
+    const file = files.shift();
+    if (!file) {
+      await sleep(1000);
+      continue;
+    }
+    concurrency++;
+    const { id, parent } = file;
+    const target = mapping[parent] || root;
+    copy_file(id, target, service_account, null, task_id)
+      .then((new_file) => {
         if (new_file) {
-          db.prepare(
-            "update task set status=?, copied = copied || ? where id=?"
-          ).run("copying", id + "\n", task_id);
+          count++;
+          db.prepare("INSERT INTO copied (taskid, fileid) VALUES (?, ?)").run(
+            task_id,
+            id
+          );
         }
-        count++;
-      } catch (e) {
-        console.error(e);
-      }
-    })
-  );
+      })
+      .catch((e) => {
+        err = e;
+      })
+      .finally(() => {
+        concurrency--;
+      });
+  } while (concurrency);
   clearInterval(loop);
 }
 
-async function copy_file(id, parent) {
-  let url = `https://www.googleapis.com/drive/v3/files/${id}/copy`;
-  let params = { supportsAllDrives: true };
-  url += "?" + params_to_query(params);
+async function copy_file(id, parent, use_sa) {
+  let url = `https://www.googleapis.com/drive/v3/files/${id}/copy?supportsAllDrives=true`;
   const config = {};
   let retry = 0;
-  while (retry < RETRY_LIMIT) {
+  while (retry < RETRY_LIMIT || RETRY_LIMIT <= 0) {
     let gtoken;
-    if (SA_TOKENS.length) {
+    if (use_sa) {
       // 如果有sa文件则优先使用
       const temp = await get_sa_token();
       gtoken = temp.gtoken;
@@ -776,17 +833,17 @@ async function copy_file(id, parent) {
       const message = data && data.error && data.error.message;
       if (message && message.toLowerCase().includes("rate limit")) {
         SA_TOKENS = SA_TOKENS.filter((v) => v.gtoken !== gtoken);
-        console.log(
-          "此帐号触发使用限额，剩余可用service account帐号数量：",
-          SA_TOKENS.length
-        );
+        if (!SA_TOKENS.length) {
+          SA_TOKENS = get_sa_batch();
+        }
+        console.log(`此sa帐号触发限额，剩余可用sa帐号：${SA_TOKENS.length}`);
       }
     }
   }
   if (!SA_TOKENS.length) {
     throw new Error("所有SA帐号流量已用完");
   } else {
-    console.warn("复制文件失败，文件id: " + id);
+    console.warn(`复制文件 ${id} 失败`);
   }
 }
 
@@ -798,47 +855,54 @@ async function create_folders({
   task_id,
   service_account
 }) {
-  if (!Array.isArray(folders))
+  if (!Array.isArray(folders)) {
     throw new Error("folders must be Array:" + folders);
+  }
   const mapping = old_mapping || {};
   mapping[source] = root;
   if (!folders.length) return mapping;
 
-  console.log("开始复制文件夹，总数：", folders.length);
+  const missed_folders = folders.filter((v) => !mapping[v.id]);
+  console.log("开始复制文件夹，总数：", missed_folders.length);
   const limit = pLimit(PARALLEL_LIMIT);
   let count = 0;
   let same_levels = folders.filter((v) => v.parent === folders[0].parent);
 
   const loop = setInterval(() => {
     const now = dayjs().format("HH:mm:ss");
-    const message = `${now} | 已创建目录数 ${count} | 排队等候的网络请求 ${
-      limit.pendingCount
-    }`;
+    const message = `${now} | 已创建目录 ${count} | 网络请求 进行中${
+      limit.activeCount
+    }/排队中${limit.pendingCount}`;
     print_progress(message);
   }, 1000);
 
   while (same_levels.length) {
+    const same_levels_missed = same_levels.filter((v) => !mapping[v.id]);
     await Promise.all(
-      same_levels.map(async (v) => {
+      same_levels_missed.map(async (v) => {
         try {
           const { name, id, parent } = v;
           const target = mapping[parent] || root;
           const new_folder = await limit(() =>
-            create_folder(name, target, service_account)
+            create_folder(name, target, service_account, limit)
           );
-          if (!new_folder) throw new Error(name + "创建失败");
           count++;
           mapping[id] = new_folder.id;
           const mapping_record = id + " " + new_folder.id + "\n";
-          db.prepare(
-            "update task set status=?, mapping = mapping || ? where id=?"
-          ).run("copying", mapping_record, task_id);
+          db.prepare("update task set mapping = mapping || ? where id=?").run(
+            mapping_record,
+            task_id
+          );
         } catch (e) {
-          console.error("创建目录出错:", v, e);
+          if (e.message === FILE_EXCEED_MSG) {
+            clearInterval(loop);
+            throw new Error(FILE_EXCEED_MSG);
+          }
+          console.error("创建目录出错:", e.message);
         }
       })
     );
-    folders = folders.filter((v) => !mapping[v.id]);
+    // folders = folders.filter(v => !mapping[v.id])
     same_levels = [].concat(
       ...same_levels.map((v) => folders.filter((vv) => vv.parent === v.id))
     );
@@ -912,7 +976,7 @@ async function rm_file({ fid, service_account }) {
   const headers = await gen_headers(service_account);
   let retry = 0;
   const url = `https://www.googleapis.com/drive/v3/files/${fid}?supportsAllDrives=true`;
-  while (retry < RETRY_LIMIT) {
+  while (retry < RETRY_LIMIT || RETRY_LIMIT <= 0) {
     try {
       return await axins.delete(url, { headers });
     } catch (err) {
