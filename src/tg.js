@@ -152,7 +152,7 @@ async function get_task_info(task_id) {
   if (!record) {
     return {};
   }
-  const { source, target, status, mapping, ctime, ftime } = record;
+  const { source, target, status, mapping, name, note, ctime, ftime } = record;
   const { copied_files } = db
     .prepare("select count(fileid) as copied_files from copied where taskid=?")
     .get(task_id);
