@@ -185,11 +185,17 @@ async function get_task_info(task_id) {
 
 ${note}
 `;
-  return { text, status, folder_count };
+  return { text, source, new_folder, status, folder_count };
 }
 
 async function send_task_info({ task_id, chat_id }) {
-  const { text, status, folder_count } = await get_task_info(task_id);
+  const {
+    text,
+    source,
+    new_folder,
+    status,
+    folder_count
+  } = await get_task_info(task_id);
   if (!text) {
     return sm({ chat_id, text: `数据库不存在此任务ID ${task_id}` });
   }
