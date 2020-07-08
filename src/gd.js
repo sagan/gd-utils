@@ -590,9 +590,15 @@ async function real_copy({
   async function get_new_root() {
     if (dncnr) return { id: target };
     if (name) {
-      return create_folder(name, target, service_account, note);
+      return create_folder(name, target, service_account, null, note);
     } else {
-      return create_folder(source_info.name, target, service_account, note);
+      return create_folder(
+        source_info.name,
+        target,
+        service_account,
+        null,
+        note
+      );
     }
   }
 
