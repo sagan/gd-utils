@@ -322,7 +322,7 @@ async function tg_copy({ fid, target, chat_id, note, update }) {
         }
       });
       return;
-    } else if (record.status === "finished") {
+    } else if (record.status === "finished" && !update) {
       sm({
         chat_id,
         text: `有相同源ID和目的ID的任务${record.id} (文件夹: ${
