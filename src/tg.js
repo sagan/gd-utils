@@ -81,6 +81,7 @@ function send_choice({ fid, chat_id, note }) {
       inline_keyboard: [
         [
           { text: "文件统计", callback_data: `count ${fid}` },
+          { text: "文件统计(无缓存)", callback_data: `count ${fid} update` },
           { text: "开始复制", callback_data: `copy ${fid}` }
         ]
       ]
