@@ -652,13 +652,21 @@ async function real_copy({
         root,
         task_id: record.id
       });
-      await copy_files({
-        files,
-        service_account,
-        root,
-        mapping: all_mapping,
-        task_id: record.id
-      });
+      try {
+        await copy_files({
+          files,
+          service_account,
+          root,
+          mapping: all_mapping,
+          task_id: record.id
+        });
+      } catch (e) {
+        db.prepare("update task set status=? where id=?").run(
+          "interrupt",
+          record.id
+        );
+        throw e;
+      }
       db.prepare("update task set status=?, ftime=? where id=?").run(
         "finished",
         Date.now(),
@@ -693,13 +701,21 @@ async function real_copy({
         root: new_root.id,
         task_id: record.id
       });
-      await copy_files({
-        files,
-        mapping,
-        service_account,
-        root: new_root.id,
-        task_id: record.id
-      });
+      try {
+        await copy_files({
+          files,
+          mapping,
+          service_account,
+          root: new_root.id,
+          task_id: record.id
+        });
+      } catch (e) {
+        db.prepare("update task set status=? where id=?").run(
+          "interrupt",
+          record.id
+        );
+        throw e;
+      }
       db.prepare("update task set status=?, ftime=? where id=?").run(
         "finished",
         Date.now(),
@@ -747,13 +763,21 @@ async function real_copy({
       root: new_root.id,
       task_id: lastInsertRowid
     });
-    await copy_files({
-      files,
-      mapping,
-      service_account,
-      root: new_root.id,
-      task_id: lastInsertRowid
-    });
+    try {
+      await copy_files({
+        files,
+        mapping,
+        service_account,
+        root: new_root.id,
+        task_id: lastInsertRowid
+      });
+    } catch (e) {
+      db.prepare("update task set status=? where id=?").run(
+        "interrupt",
+        lastInsertRowid
+      );
+      throw e;
+    }
     db.prepare("update task set status=?, ftime=? where id=?").run(
       "finished",
       Date.now(),
