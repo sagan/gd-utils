@@ -61,7 +61,7 @@ router.post("/api/gdurl/tgbot", async (ctx) => {
     chat_id = callback_query.from.id;
     note = callback_query.message ? callback_query.message.text : "";
   } else if (message) {
-    text = message.text && message.text.trim();
+    text = (message.text || message.caption || "").trim();
     username = message.from && message.from.username;
     chat_id = message.chat.id;
   }
