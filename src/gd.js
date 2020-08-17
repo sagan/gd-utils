@@ -857,12 +857,11 @@ async function copy_file(id, parent, use_sa) {
       const { data } = await axins.post(url, { parents: [parent] }, config);
       return data;
     } catch (err) {
-      retry++;
       handle_error(err);
       const data = err && err.response && err.response.data;
       const message = data && data.error && data.error.message;
       if (
-        retry >= 4 &&
+        retry >= 3 &&
         message &&
         message.toLowerCase().includes("rate limit")
       ) {
@@ -871,8 +870,10 @@ async function copy_file(id, parent, use_sa) {
           SA_TOKENS = get_sa_batch();
         }
         console.log(`此sa帐号触发限额，剩余可用sa帐号：${SA_TOKENS.length}`);
+        retry = 0;
       } else {
         await sleep(Math.min(100, 2 ** retry) * 1000);
+        retry++;
       }
     }
   }
