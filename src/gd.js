@@ -861,12 +861,18 @@ async function copy_file(id, parent, use_sa) {
       handle_error(err);
       const data = err && err.response && err.response.data;
       const message = data && data.error && data.error.message;
-      if (message && message.toLowerCase().includes("rate limit")) {
+      if (
+        retry >= 4 &&
+        message &&
+        message.toLowerCase().includes("rate limit")
+      ) {
         SA_TOKENS = SA_TOKENS.filter((v) => v.gtoken !== gtoken);
         if (!SA_TOKENS.length) {
           SA_TOKENS = get_sa_batch();
         }
         console.log(`此sa帐号触发限额，剩余可用sa帐号：${SA_TOKENS.length}`);
+      } else {
+        await sleep(Math.min(100, 2 ** retry) * 1000);
       }
     }
   }
